@@ -42,12 +42,26 @@ Designed to deploy on **Vercel**, backed by a serverless Postgres database (Verc
    - `NEXTAUTH_URL` — `http://localhost:3000` for local dev.
    - `ALLOWED_EMAIL_DOMAIN` — optional; restricts registration to `@yourdomain` emails.
 
-3. **Push the schema and seed reference data** (exercise library, badges, Technogym equipment):
+3. **Push the schema and seed reference data** (exercise library, badges, Technogym equipment,
+   and a few test accounts):
 
    ```bash
    npx prisma db push
    npm run db:seed
    ```
+
+   This also creates three ready-to-use test accounts with sample activity history, a streak,
+   badges, and a sample plan already populated — handy for demoing without registering first:
+
+   | Email | Password |
+   |---|---|
+   | `ahmed.test@moci.gov.qa` | `MociGym@2026` |
+   | `fatima.test@moci.gov.qa` | `MociGym@2026` |
+   | `mohammed.test@moci.gov.qa` | `MociGym@2026` |
+
+   These are seed data for testing only — change or remove them before handing the app to real
+   staff (delete the `TEST_USERS` block in `prisma/seed.ts`, or just delete the accounts from the
+   database once real users have registered).
 
 4. **Run the dev server**
 

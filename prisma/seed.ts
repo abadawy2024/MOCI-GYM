@@ -1,7 +1,38 @@
-import { PrismaClient, EquipmentCategory, ExerciseCategory } from "@prisma/client";
-import { BADGE_DEFINITIONS } from "../src/lib/gamification";
+import { PrismaClient, EquipmentCategory, ExerciseCategory, ActivityType } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { BADGE_DEFINITIONS, evaluateAndAwardBadges } from "../src/lib/gamification";
 
 const prisma = new PrismaClient();
+
+const TEST_PASSWORD = "MociGym@2026";
+
+const TEST_USERS: {
+  name: string;
+  email: string;
+  department: string;
+  logsAgoDays: number[]; // days ago (0 = today) to create a sample logged session
+}[] = [
+  {
+    name: "Ahmed Al-Kaabi",
+    email: "ahmed.test@moci.gov.qa",
+    department: "IT Department",
+    logsAgoDays: [0, 1, 2, 3, 4, 6, 8, 11, 14], // active streak + history
+  },
+  {
+    name: "Fatima Al-Sulaiti",
+    email: "fatima.test@moci.gov.qa",
+    department: "Human Resources",
+    logsAgoDays: [0, 2, 5, 9],
+  },
+  {
+    name: "Mohammed Al-Naimi",
+    email: "mohammed.test@moci.gov.qa",
+    department: "Finance",
+    logsAgoDays: [3],
+  },
+];
+
+const LOG_TYPES: ActivityType[] = ["STRENGTH", "CARDIO", "CLASS", "SPORT"];
 
 const EQUIPMENT: {
   name: string;
@@ -130,7 +161,86 @@ async function main() {
     });
   }
 
-  console.log("Seed complete.");
+  console.log("Seeding test users...");
+  const passwordHash = await bcrypt.hash(TEST_PASSWORD, 10);
+
+  for (const [i, u] of TEST_USERS.entries()) {
+    const user = await prisma.user.upsert({
+      where: { email: u.email },
+      update: {},
+      create: {
+        name: u.name,
+        email: u.email,
+        department: u.department,
+        passwordHash,
+      },
+    });
+
+    const existingLogs = await prisma.workoutLog.count({ where: { userId: user.id } });
+    if (existingLogs === 0) {
+      for (const [j, daysAgo] of u.logsAgoDays.entries()) {
+        const date = new Date();
+        date.setDate(date.getDate() - daysAgo);
+        const type = LOG_TYPES[j % LOG_TYPES.length];
+        const durationMinutes = 30 + ((j * 7) % 40);
+        await prisma.workoutLog.create({
+          data: {
+            userId: user.id,
+            type,
+            date,
+            durationMinutes,
+            caloriesBurned: durationMinutes * 7,
+            notes: j === 0 ? "Great session at the MOCI gym" : undefined,
+          },
+        });
+      }
+      await evaluateAndAwardBadges(user.id);
+    }
+
+    // Give the first test user a sample plan to demo the Plans feature.
+    if (i === 0) {
+      const existingPlan = await prisma.workoutPlan.findFirst({ where: { userId: user.id } });
+      if (!existingPlan) {
+        const chestPress = await prisma.exercise.findUnique({ where: { name: "Chest Press (Technogym Selection)" } });
+        const treadmill = await prisma.exercise.findUnique({ where: { name: "Treadmill Run (Skillrun)" } });
+
+        await prisma.workoutPlan.create({
+          data: {
+            userId: user.id,
+            title: "Full Body Foundations",
+            goal: "Build strength and endurance",
+            description: "A simple two-day split to get started at the MOCI gym.",
+            days: {
+              create: [
+                {
+                  dayNumber: 1,
+                  label: "Strength Day",
+                  exercises: chestPress
+                    ? { create: [{ exerciseId: chestPress.id, order: 0, sets: 4, reps: 10 }] }
+                    : undefined,
+                },
+                {
+                  dayNumber: 2,
+                  label: "Cardio Day",
+                  exercises: treadmill
+                    ? { create: [{ exerciseId: treadmill.id, order: 0, durationSeconds: 1200 }] }
+                    : undefined,
+                },
+              ],
+            },
+          },
+        });
+      }
+    }
+  }
+
+  console.log("\nTest accounts (all use the same password):");
+  console.log(`  Password: ${TEST_PASSWORD}`);
+  for (const u of TEST_USERS) {
+    console.log(`  - ${u.email}`);
+  }
+
+  console.log("\nSeed complete.");
 }
 
 main()
