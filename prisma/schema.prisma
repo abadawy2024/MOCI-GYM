@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STAFF
+  ADMIN
+}
+
+enum ExerciseCategory {
+  STRENGTH
+  CARDIO
+  MOBILITY
+  FUNCTIONAL
+}
+
+enum EquipmentCategory {
+  CARDIO
+  STRENGTH
+  FUNCTIONAL
+  RECOVERY
+  GROUP_TRAINING
+}
+
+enum ActivityType {
+  STRENGTH
+  CARDIO
+  CLASS
+  SPORT
+  OTHER
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  department   String?
+  role         Role          @default(STAFF)
+  createdAt    DateTime      @default(now())
+  plans        WorkoutPlan[]
+  logs         WorkoutLog[]
+  badges       UserBadge[]
+}
+
+model WorkoutPlan {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  goal        String?
+  isTemplate  Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  days        PlanDay[]
+  logs        WorkoutLog[]
+}
+
+model PlanDay {
+  id        String         @id @default(cuid())
+  planId    String
+  plan      WorkoutPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  dayNumber Int
+  label     String
+  exercises PlanExercise[]
+  logs      WorkoutLog[]
+
+  @@index([planId])
+}
+
+model Exercise {
+  id            String            @id @default(cuid())
+  name          String            @unique
+  category      ExerciseCategory
+  muscleGroup   String?
+  equipmentTag  String?
+  description   String?
+  planExercises PlanExercise[]
+}
+
+model PlanExercise {
+  id              String   @id @default(cuid())
+  planDayId       String
+  planDay         PlanDay  @relation(fields: [planDayId], references: [id], onDelete: Cascade)
+  exerciseId      String
+  exercise        Exercise @relation(fields: [exerciseId], references: [id])
+  order           Int      @default(0)
+  sets            Int?
+  reps            Int?
+  durationSeconds Int?
+  notes           String?
+
+  @@index([planDayId])
+}
+
+model WorkoutLog {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId          String?
+  plan            WorkoutPlan?  @relation(fields: [planId], references: [id])
+  planDayId       String?
+  planDay         PlanDay?      @relation(fields: [planDayId], references: [id])
+  type            ActivityType
+  date            DateTime      @default(now())
+  durationMinutes Int
+  caloriesBurned  Int?
+  notes           String?
+  createdAt       DateTime      @default(now())
+
+  @@index([userId, date])
+}
+
+model Equipment {
+  id          String            @id @default(cuid())
+  name        String
+  brand       String            @default("Technogym")
+  category    EquipmentCategory
+  description String
+  quantity    Int               @default(1)
+  imageUrl    String?
+}
+
+model Badge {
+  id          String      @id @default(cuid())
+  code        String      @unique
+  name        String
+  description String
+  icon        String
+  users       UserBadge[]
+}
+
+model UserBadge {
+  id       String   @id @default(cuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeId  String
+  badge    Badge    @relation(fields: [badgeId], references: [id])
+  earnedAt DateTime @default(now())
+
+  @@unique([userId, badgeId])
+}
